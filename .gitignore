@@ -1,0 +1,17 @@
+# Ignore compiled Python files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore PyInstaller build folders and files
+build/
+dist/
+Samples_Einblas_Protokoll/
+*.spec
+
+# Ignore execution log files
+*.log
+
+# Ignore local Excel test files
+*.xlsx

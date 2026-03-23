@@ -1,0 +1,6 @@
+pandas
+openpyxl
+tk
+python-dateutil
+PyMuPDF
+numpy
