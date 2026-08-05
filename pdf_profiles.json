@@ -198,6 +198,16 @@
                     {
                         "type": "special",
                         "name": "hausanschluss_date"
+                    },
+                    {
+                        "type": "next_line",
+                        "keys": [
+                            "(C)-12x102 I or I"
+                        ]
+                    },
+                    {
+                        "type": "fixed_index",
+                        "index": 68
                     }
                 ],
                 "Bezeichnung Rohrverband": [
@@ -289,6 +299,67 @@
                             "Baumaße",
                             "Baumaße:"
                         ]
+                    }
+                ]
+            }
+        },
+        {
+            "name": "OTDR",
+            "trigger_keywords": [
+                "V-Scout Diagramm"
+            ],
+            "columns": {
+                "Datum": [],
+                "Faser": [
+                    {
+                        "type": "inline",
+                        "keys": [
+                            "Faser"
+                        ]
+                    },
+                    {
+                        "type": "next_line",
+                        "keys": [
+                            "Faser"
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "name": "Kalibrierungsprotokoll",
+            "trigger_keywords": [
+                "Kalibrierungsprotokoll"
+            ],
+            "columns": {
+                "Datum": [
+                    {
+                        "type": "regex",
+                        "pattern": "Datum der kalibrierung\\s*([\\d.]+)",
+                        "group": 1,
+                        "pick": "first"
+                    }
+                ],
+                "Anfang": [
+                    {
+                        "type": "inline",
+                        "keys": [
+                            "Anfang"
+                        ]
+                    },
+                    {
+                        "type": "regex",
+                        "pattern": "Anfang\\s+(\\S+)",
+                        "group": 1,
+                        "pick": "first"
+                    }
+                ],
+                "Ende": [
+                    {
+                        "type": "regex",
+                        "pattern": "Ende\\s+(.+)",
+                        "group": 1,
+                        "pick": "first"
                     }
                 ]
             }

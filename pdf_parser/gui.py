@@ -226,9 +226,13 @@ class PDFParserApp:
 
     def update_progress(self, status_text: str, current: int, total: int):
         def _update():
-            self.lbl_status.config(text=status_text)
             if total > 0:
+                percent = int((current / total) * 100)
+                full_status = f"{status_text} ({percent}%)"
                 self.progress_var.set((current / total) * 100)
+            else:
+                full_status = status_text
+            self.lbl_status.config(text=full_status)
         self.root.after(0, _update)
 
     def finish_analysis(self, success: bool, result_msg: str, file_path: str):
@@ -316,9 +320,11 @@ class ProfileManagerWindow(tk.Toplevel):
         self.selected_profile_idx = None
         self.selected_column_name = None
         
-        self.pdf_lines = []          # cleaned text lines
+        self.pdf_lines = []          # cleaned text lines for active page
         self.pdf_line_bboxes = []    # corresponding fitz.Rect for each line (may be None)
         self.loaded_pdf_path = None
+        self.current_page_idx = 0
+        self.total_pages = 1
         self._pdf_img_tk = None      # keep reference to prevent GC
         self._pdf_page_obj = None    # kept open for click-lookup (closed on next load)
         self._pdf_doc_obj = None
@@ -327,17 +333,27 @@ class ProfileManagerWindow(tk.Toplevel):
         self._build_ui()
         self._load_profiles_list()
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # UI Construction
-    # ──────────────────────────────────────────────────────────────────────────
-    def _build_ui(self):
-        # 3 Panels PanedWindow
-        paned = ttk.PanedWindow(self, orient="horizontal")
-        paned.pack(fill="both", expand=True, padx=15, pady=(15, 5))
-        
-        # ── Panel 1: Profiles Sidebar ──────────────────────────────────────
-        left_frame = ttk.LabelFrame(paned, text=" Profiles ")
+    def _create_sector_title(self, parent, text: str):
+        import tkinter as tk
+        title_var = tk.StringVar(value=text)
+        entry = tk.Entry(parent, textvariable=title_var, state="readonly",
+                         readonlybackground="#F3F4F6", relief="flat", bd=0,
+                         font=("Segoe UI", 9, "bold"), fg="#1F2937")
+        entry.pack(anchor="w", padx=5, pady=(2, 5))
+        return entry
+
+    def _create_sector_title(self, parent, text: str):
+        title_var = tk.StringVar(value=text)
+        entry = tk.Entry(parent, textvariable=title_var, state="readonly",
+                         readonlybackground="#F3F4F6", relief="flat", bd=0,
+                         font=("Segoe UI", 9, "bold"), fg="#1F2937")
+        entry.pack(anchor="w", padx=5, pady=(2, 5))
+        return entry
+
+    # ───────────�        # ── Panel 1: Profiles Sidebar ──────────────────────────────────────
+        left_frame = ttk.LabelFrame(paned, text="")
         paned.add(left_frame, weight=1)
+        self._create_sector_title(left_frame, "Profiles")
         
         self.listbox_profiles = tk.Listbox(left_frame, font=("Segoe UI", 10))
         self.listbox_profiles.pack(fill="both", expand=True, padx=5, pady=5)
@@ -355,8 +371,9 @@ class ProfileManagerWindow(tk.Toplevel):
         ttk.Button(move_frame_profiles, text="▼ Move Down", command=self._move_profile_down, style="Secondary.TButton").pack(side="left", fill="x", expand=True, padx=1)
         
         # ── Panel 2: Columns list ──────────────────────────────────────────
-        center_frame = ttk.LabelFrame(paned, text=" Columns Configuration ")
+        center_frame = ttk.LabelFrame(paned, text="")
         paned.add(center_frame, weight=1)
+        self._create_sector_title(center_frame, "Columns Configuration")
         
         self.listbox_columns = tk.Listbox(center_frame, font=("Segoe UI", 10))
         self.listbox_columns.pack(fill="both", expand=True, padx=5, pady=5)
@@ -378,9 +395,23 @@ class ProfileManagerWindow(tk.Toplevel):
         btn_frame_columns = ttk.Frame(center_frame)
         btn_frame_columns.pack(fill="x", padx=5, pady=(0, 5))
         ttk.Button(btn_frame_columns, text="Remove Column", command=self._remove_column, style="Secondary.TButton").pack(fill="x")
+ 
+        # ── Panel 3: PDF Calibration ───────────────────────────────────────
+        right_frame = ttk.LabelFrame(paned, text="")
+        paned.add(right_frame, weight=5)
+        self._create_sector_title(right_frame, "Layout Calibration & Rules")r_frame)
+        add_col_frame.pack(fill="x", padx=5, pady=(0, 2))
+        self.entry_new_col = ttk.Entry(add_col_frame, font=("Segoe UI", 9))
+        self.entry_new_col.pack(side="left", fill="x", expand=True, ipady=2)
+        ttk.Button(add_col_frame, text="+ Add", command=self._add_column, style="Secondary.TButton").pack(side="right", padx=(5, 0))
+        
+        btn_frame_columns = ttk.Frame(center_frame)
+        btn_frame_columns.pack(fill="x", padx=5, pady=(0, 5))
+        ttk.Button(btn_frame_columns, text="Remove Column", command=self._remove_column, style="Secondary.TButton").pack(fill="x")
 
         # ── Panel 3: PDF Calibration ───────────────────────────────────────
-        right_frame = ttk.LabelFrame(paned, text=" Layout Calibration & Rules ")
+        right_frame = ttk.LabelFrame(paned, text="")
+        self._create_sector_title(right_frame, "Layout Calibration & Rules")
         paned.add(right_frame, weight=5)
 
         # Split Right Frame into two sub-columns: left for PDF Image, right for settings
@@ -406,12 +437,26 @@ class ProfileManagerWindow(tk.Toplevel):
         ttk.Button(pdf_select_frame, text="Browse...", command=self._browse_pdf, style="Secondary.TButton").pack(side="left", padx=5)
         ttk.Button(pdf_select_frame, text="Refresh Folder", command=self._refresh_folder_pdfs, style="Secondary.TButton").pack(side="left")
 
+        # Multi-page Navigation Bar
+        page_nav_frame = ttk.Frame(calib_left)
+        page_nav_frame.pack(fill="x", padx=5, pady=(2, 4))
+        
+        self.btn_prev_page = ttk.Button(page_nav_frame, text="◀ Prev Page", command=self._prev_page, style="Secondary.TButton", state="disabled")
+        self.btn_prev_page.pack(side="left", padx=2)
+        
+        self.lbl_page_num = ttk.Label(page_nav_frame, text="Page 1 / 1", font=("Segoe UI", 9, "bold"))
+        self.lbl_page_num.pack(side="left", padx=10)
+        
+        self.btn_next_page = ttk.Button(page_nav_frame, text="Next Page ▶", command=self._next_page, style="Secondary.TButton", state="disabled")
+        self.btn_next_page.pack(side="left", padx=2)
+
         # Alert banner for comments/stamps
         self.lbl_alert = tk.Label(calib_left, text="", bg="#F3F4F6", font=("Segoe UI", 9, "bold"), anchor="w", padx=10, pady=4)
         self.lbl_alert.pack(fill="x", padx=5, pady=2)
 
         # PDF image viewer
-        img_frame = ttk.LabelFrame(calib_left, text=" PDF Page Preview (click to select line) ")
+        img_frame = ttk.LabelFrame(calib_left, text="")
+        self._create_sector_title(img_frame, "PDF Page Preview (click to select line)")
         img_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
         self.canvas_pdf = tk.Canvas(img_frame, bg="#E5E7EB", cursor="crosshair", highlightthickness=0)
@@ -424,7 +469,8 @@ class ProfileManagerWindow(tk.Toplevel):
         self.canvas_pdf.bind("<Button-1>", self._on_pdf_canvas_click)
 
         # Right Calib column: text lines & rules config
-        lines_frame = ttk.LabelFrame(calib_right, text=" PDF Text Lines (click to auto-suggest rule) ")
+        lines_frame = ttk.LabelFrame(calib_right, text="")
+        self._create_sector_title(lines_frame, "PDF Text Lines (click to auto-suggest rule)")
         lines_frame.pack(fill="both", expand=True, padx=5, pady=5)
         
         scrollbar_lines = ttk.Scrollbar(lines_frame, orient="vertical")
@@ -433,10 +479,33 @@ class ProfileManagerWindow(tk.Toplevel):
         self.listbox_pdf_lines = tk.Listbox(lines_frame, font=("Consolas", 9), selectmode="single", yscrollcommand=scrollbar_lines.set)
         self.listbox_pdf_lines.pack(fill="both", expand=True, padx=5, pady=5)
         self.listbox_pdf_lines.bind("<<ListboxSelect>>", self._on_line_select)
+        self.listbox_pdf_lines.bind("<Control-c>", self._copy_selected_pdf_line)
+        self.listbox_pdf_lines.bind("<Control-C>", self._copy_selected_pdf_line)
         scrollbar_lines.config(command=self.listbox_pdf_lines.yview)
 
+        lines_action_frame = ttk.Frame(lines_frame)
+        lines_action_frame.pack(fill="x", padx=5, pady=(2, 4))
+        ttk.Button(lines_action_frame, text="📋 Copy Selected Line", command=self._copy_selected_pdf_line, style="Secondary.TButton").pack(side="left")
+
+        # Right-click Context Menu for Listbox
+        self.line_context_menu = tk.Menu(self, tearoff=0)
+        self.line_context_menu.add_command(label="📋 Copy Line Text", command=self._copy_selected_pdf_line)
+        self.line_context_menu.add_command(label="🎯 Set as Trigger Keyword", command=self._set_trigger_from_pdf)
+
+        def _show_line_context_menu(event):
+            idx = self.listbox_pdf_lines.nearest(event.y)
+            if idx >= 0:
+                self.listbox_pdf_lines.selection_clear(0, tk.END)
+                self.listbox_pdf_lines.selection_set(idx)
+                self._on_line_select(None, forced_idx=idx)
+            self.line_context_menu.post(event.x_root, event.y_root)
+
+        self.listbox_pdf_lines.bind("<Button-3>", _show_line_context_menu)
+        self.listbox_pdf_lines.bind("<Button-2>", _show_line_context_menu)
+
         # Trigger keyword section
-        trigger_frame = ttk.LabelFrame(calib_right, text=" Trigger Keywords ")
+        trigger_frame = ttk.LabelFrame(calib_right, text="")
+        self._create_sector_title(trigger_frame, "Trigger Keywords")
         trigger_frame.pack(fill="x", padx=5, pady=(5, 2))
         
         ttk.Label(
@@ -453,7 +522,8 @@ class ProfileManagerWindow(tk.Toplevel):
         ttk.Button(trigger_row, text="Auto Detect", command=self._auto_detect_trigger, style="Secondary.TButton").pack(side="right", padx=(4, 0))
 
         # Rule editor
-        rules_frame = ttk.LabelFrame(calib_right, text=" Extraction Rules for selected Column ")
+        rules_frame = ttk.LabelFrame(calib_right, text="")
+        self._create_sector_title(rules_frame, "Extraction Rules for selected Column")
         rules_frame.pack(fill="x", padx=5, pady=(2, 5))
 
         rule_list_row = ttk.Frame(rules_frame)
@@ -477,7 +547,8 @@ class ProfileManagerWindow(tk.Toplevel):
         self.lbl_rule_result.pack(side="right", padx=6)
 
         # Dynamic rule param area
-        param_outer = ttk.LabelFrame(rules_frame, text=" Add New Rule ")
+        param_outer = ttk.LabelFrame(rules_frame, text="")
+        self._create_sector_title(param_outer, "Add / Edit Rule")
         param_outer.pack(fill="x", padx=5, pady=(2, 5))
 
         type_row = ttk.Frame(param_outer)
@@ -498,7 +569,10 @@ class ProfileManagerWindow(tk.Toplevel):
         # Pre-create all possible param widgets (shown/hidden by type)
         self._build_rule_param_widgets()
 
-        ttk.Button(param_outer, text="+ Add Rule", command=self._add_rule, style="Primary.TButton").pack(anchor="e", padx=5, pady=(0, 5))
+        rule_action_btn_row = ttk.Frame(param_outer)
+        rule_action_btn_row.pack(fill="x", padx=5, pady=(0, 5))
+        ttk.Button(rule_action_btn_row, text="✓ Update Selected Rule", command=self._update_rule, style="Secondary.TButton").pack(side="right", padx=2)
+        ttk.Button(rule_action_btn_row, text="+ Add New Rule", command=self._add_rule, style="Primary.TButton").pack(side="right", padx=2)
 
         # ── Footer Actions ─────────────────────────────────────────────────
         footer_frame = ttk.Frame(self)
@@ -758,6 +832,57 @@ class ProfileManagerWindow(tk.Toplevel):
 
     def _on_rule_select(self, event=None):
         self.lbl_rule_result.config(text="")
+        selection = self.listbox_rules.curselection()
+        if not selection or self.selected_profile_idx is None or not self.selected_column_name:
+            return
+        
+        p = self.profiles[self.selected_profile_idx]
+        rules = p["columns"].get(self.selected_column_name, [])
+        idx = selection[0]
+        if idx >= len(rules):
+            return
+        rule = rules[idx]
+        
+        rtype = rule.get("type", "")
+        label = RULE_TYPE_LABELS.get(rtype, "")
+        if label in self.combo_rule_type["values"]:
+            self.combo_rule_type.set(label)
+            self._on_rule_type_change()
+
+        if rtype in ("inline", "next_line"):
+            keys = rule.get("keys", [""])
+            self._pw_kw_entry.delete(0, tk.END)
+            self._pw_kw_entry.insert(0, keys[0] if keys else "")
+        elif rtype == "fixed_index":
+            self._pw_idx_var.set(rule.get("index", 0))
+        elif rtype == "speednet_positional":
+            self._pw_sp_idx.set(rule.get("index", 0))
+            self._pw_sp_pat.delete(0, tk.END)
+            self._pw_sp_pat.insert(0, rule.get("pattern", ""))
+        elif rtype == "regex":
+            self._pw_re_pat.delete(0, tk.END)
+            self._pw_re_pat.insert(0, rule.get("pattern", ""))
+            self._pw_re_grp.set(rule.get("group", 1))
+            self._pw_re_pick.set(rule.get("pick", "first"))
+        elif rtype == "regex_combine":
+            patterns = rule.get("patterns", ["", ""])
+            self._pw_rc_p1.delete(0, tk.END)
+            self._pw_rc_p1.insert(0, patterns[0] if len(patterns) > 0 else "")
+            self._pw_rc_p2.delete(0, tk.END)
+            self._pw_rc_p2.insert(0, patterns[1] if len(patterns) > 1 else "")
+            self._pw_rc_fmt.delete(0, tk.END)
+            self._pw_rc_fmt.insert(0, rule.get("format", "{0} / {1}"))
+
+    def _copy_selected_pdf_line(self, event=None):
+        selection = self.listbox_pdf_lines.curselection()
+        if not selection or not self.pdf_lines:
+            return
+        idx = selection[0]
+        if idx < len(self.pdf_lines):
+            line_text = self.pdf_lines[idx]
+            self.clipboard_clear()
+            self.clipboard_append(line_text)
+            self.lbl_rule_result.config(text=f"📋 Copied: '{line_text[:30]}...'", foreground="#2563EB")
 
     def _add_rule(self):
         if self.selected_profile_idx is None or not self.selected_column_name:
@@ -807,10 +932,59 @@ class ProfileManagerWindow(tk.Toplevel):
                 
         p["columns"][self.selected_column_name].append(rule_dict)
         self._load_rules_list()
-        # Clear param fields
-        self._pw_kw_entry.delete(0, tk.END)
-        self._pw_re_pat.delete(0, tk.END)
-        self._pw_sp_pat.delete(0, tk.END)
+
+    def _update_rule(self):
+        selection = self.listbox_rules.curselection()
+        if not selection or self.selected_profile_idx is None or not self.selected_column_name:
+            messagebox.showwarning("Warning", "Select a rule from the list to update.")
+            return
+        
+        label = self.combo_rule_type.get()
+        rtype = next((k for k, v in RULE_TYPE_LABELS.items() if v == label), None)
+        if not rtype:
+            messagebox.showerror("Error", "Select a rule type first.")
+            return
+            
+        p = self.profiles[self.selected_profile_idx]
+        rule_dict = {"type": rtype}
+
+        try:
+            if rtype in ("inline", "next_line"):
+                kw = self._pw_kw_entry.get().strip()
+                if not kw:
+                    messagebox.showerror("Error", "Keyword / Label is required.")
+                    return
+                rule_dict["keys"] = [kw]
+            elif rtype == "fixed_index":
+                rule_dict["index"] = int(self._pw_idx_var.get())
+            elif rtype == "speednet_positional":
+                rule_dict["index"] = int(self._pw_sp_idx.get())
+                rule_dict["pattern"] = self._pw_sp_pat.get().strip()
+            elif rtype == "regex":
+                pat = self._pw_re_pat.get().strip()
+                if not pat:
+                    messagebox.showerror("Error", "Regex pattern is required.")
+                    return
+                rule_dict["pattern"] = pat
+                rule_dict["group"] = int(self._pw_re_grp.get())
+                rule_dict["pick"] = self._pw_re_pick.get()
+            elif rtype == "regex_combine":
+                p1 = self._pw_rc_p1.get().strip()
+                p2 = self._pw_rc_p2.get().strip()
+                if not p1 or not p2:
+                    messagebox.showerror("Error", "Both patterns are required for regex_combine.")
+                    return
+                rule_dict["patterns"] = [p1, p2]
+                rule_dict["format"] = self._pw_rc_fmt.get().strip() or "{0} / {1}"
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+            return
+
+        idx = selection[0]
+        p["columns"][self.selected_column_name][idx] = rule_dict
+        self._load_rules_list()
+        self.listbox_rules.selection_set(idx)
+        self.lbl_rule_result.config(text=f"✓ Rule updated!", foreground="#059669")
 
     def _delete_rule(self):
         selection = self.listbox_rules.curselection()
@@ -918,6 +1092,25 @@ class ProfileManagerWindow(tk.Toplevel):
             elif name == "meterzahlen_extractor":
                 from .extractors import MeterzahlenExtractor
                 val = MeterzahlenExtractor().extract(text)
+            elif name.startswith("hausanschluss_") and hasattr(self, "_pdf_doc_obj") and self._pdf_doc_obj:
+                from .logic import PDFParserLogic
+                dummy_logic = PDFParserLogic("", "", lambda *a: None, lambda *a: None, [])
+                haus_data = dummy_logic._extract_hausanschluss(self._pdf_doc_obj, text)
+                key_map = {
+                    "hausanschluss_bbnd_id": "BBND ID",
+                    "hausanschluss_anzahl_we": "Anzahl WE",
+                    "hausanschluss_nvt": "Bezeichnung NVt",
+                    "hausanschluss_date": "Datum Herstellung Hausanschluss",
+                    "hausanschluss_rohrverband": "Bezeichnung Rohrverband",
+                    "hausanschluss_farbe": "Farbe",
+                    "hausanschluss_verbundrohr": "Verbundrohr",
+                    "hausanschluss_bild1": "Bild 1",
+                    "hausanschluss_bild2": "Bild 2",
+                    "hausanschluss_bild3": "Bild 3",
+                    "hausanschluss_bild4": "Bild 4",
+                    "hausanschluss_signature": "Unterschrift"
+                }
+                val = str(haus_data.get(key_map.get(name, ""), ""))
         return val
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -954,11 +1147,8 @@ class ProfileManagerWindow(tk.Toplevel):
             self._load_pdf(f)
             self.combo_pdfs.set(os.path.basename(f))
 
-    def _load_pdf(self, path: str):
+    def _load_pdf(self, path: str, page_idx: int = 0):
         self.loaded_pdf_path = path
-        self.listbox_pdf_lines.delete(0, tk.END)
-        self.pdf_lines = []
-        self.pdf_line_bboxes = []
         self.lbl_rule_result.config(text="")
 
         # Close any previously held doc safely
@@ -978,46 +1168,74 @@ class ProfileManagerWindow(tk.Toplevel):
                 doc.close()
                 return
 
-            page = doc[0]
-
-            # Manual edits detection
-            has_annots = any(True for _ in page.annots())
-            has_widgets = any(True for _ in page.widgets())
-            
-            if has_annots or has_widgets:
-                feats = []
-                if has_annots: feats.append("Annotations")
-                if has_widgets: feats.append("Form Fields")
-                self.lbl_alert.config(
-                    text=f"⚠️ Manual overrides detected: {', '.join(feats)}.",
-                    fg="#92400E", bg="#FEF3C7"
-                )
-            else:
-                self.lbl_alert.config(text="✓ PDF has no manual overrides.", fg="#065F46", bg="#D1FAE5")
-
-            # Extract lines with bounding boxes for click-to-highlight
-            blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
-            for block in blocks:
-                if block.get("type") != 0:
-                    continue
-                for line in block.get("lines", []):
-                    spans = line.get("spans", [])
-                    line_text = "".join(s.get("text", "") for s in spans).strip()
-                    if line_text:
-                        bbox = fitz.Rect(line.get("bbox", (0, 0, 0, 0)))
-                        self.pdf_lines.append(line_text)
-                        self.pdf_line_bboxes.append(bbox)
-                        self.listbox_pdf_lines.insert(tk.END, f"[{len(self.pdf_lines)-1}]: {line_text}")
-
-            # Render page as image
-            self._render_pdf_image(page)
-
-            # Keep doc + page open for click lookups
             self._pdf_doc_obj = doc
-            self._pdf_page_obj = page
+            self.total_pages = len(doc)
+            self.current_page_idx = max(0, min(page_idx, self.total_pages - 1))
+            self._load_pdf_page(self.current_page_idx)
 
         except Exception as e:
             self.lbl_alert.config(text=f"Error reading PDF: {e}", fg="#991B1B", bg="#FEE2E2")
+
+    def _prev_page(self):
+        if self.current_page_idx > 0:
+            self._load_pdf_page(self.current_page_idx - 1)
+
+    def _next_page(self):
+        if self.current_page_idx < self.total_pages - 1:
+            self._load_pdf_page(self.current_page_idx + 1)
+
+    def _load_pdf_page(self, page_idx: int):
+        if not self._pdf_doc_obj:
+            return
+        
+        doc = self._pdf_doc_obj
+        if page_idx < 0 or page_idx >= len(doc):
+            return
+
+        self.current_page_idx = page_idx
+        page = doc[page_idx]
+        self._pdf_page_obj = page
+
+        # Refresh text lines and bounding boxes for active page
+        self.listbox_pdf_lines.delete(0, tk.END)
+        self.pdf_lines = []
+        self.pdf_line_bboxes = []
+
+        import fitz
+        blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
+        for block in blocks:
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                spans = line.get("spans", [])
+                line_text = "".join(s.get("text", "") for s in spans).strip()
+                if line_text:
+                    bbox = fitz.Rect(line.get("bbox", (0, 0, 0, 0)))
+                    self.pdf_lines.append(line_text)
+                    self.pdf_line_bboxes.append(bbox)
+                    self.listbox_pdf_lines.insert(tk.END, f"[{len(self.pdf_lines)-1}]: {line_text}")
+
+        # Update alert label for this page
+        has_annots = any(True for _ in page.annots())
+        has_widgets = any(True for _ in page.widgets())
+        if has_annots or has_widgets:
+            feats = []
+            if has_annots: feats.append("Annotations")
+            if has_widgets: feats.append("Form Fields")
+            self.lbl_alert.config(
+                text=f"⚠️ Page {page_idx+1}/{self.total_pages} overrides: {', '.join(feats)}.",
+                fg="#92400E", bg="#FEF3C7"
+            )
+        else:
+            self.lbl_alert.config(text=f"✓ Page {page_idx+1}/{self.total_pages} has no manual overrides.", fg="#065F46", bg="#D1FAE5")
+
+        # Update page label and navigation buttons
+        self.lbl_page_num.config(text=f"Page {page_idx + 1} / {self.total_pages}")
+        self.btn_prev_page.config(state="normal" if page_idx > 0 else "disabled")
+        self.btn_next_page.config(state="normal" if page_idx < self.total_pages - 1 else "disabled")
+
+        # Render active page image
+        self._render_pdf_image(page)
 
     def _render_pdf_image(self, page, highlight_bbox=None):
         """Render the PDF page to the canvas. Optionally highlight a bounding box."""
@@ -1310,8 +1528,8 @@ class ProfileManagerWindow(tk.Toplevel):
             # Normalize dates & splits
             if "Einblasdatum" in results:
                 raw_date = results["Einblasdatum"]
-                if raw_date and not re.search(r"\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4}", raw_date):
-                    date_match = re.search(r"(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4})\s+(\d{1,2}:\d{2}(?::\d{2})?)", page0_text)
+                if raw_date and not re.search(r"\d{1,2}[.\-/: ]\d{1,2}[.\-/: ]\d{2,4}", raw_date):
+                    date_match = re.search(r"(\d{1,2}[.\-/: ]\d{1,2}[.\-/: ]\d{2,4})\s+(\d{1,2}:\d{2}(?::\d{2})?)", page0_text)
                     raw_date = date_match.group(0) if date_match else ""
                 dummy_logic = PDFParserLogic("", "", lambda *a: None, lambda *a: None, [])
                 results["Einblasdatum"] = dummy_logic._normalize_date(raw_date)

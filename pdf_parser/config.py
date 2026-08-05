@@ -7,6 +7,10 @@ from typing import Dict, List, Any
 DEFAULT_COLS_GENERAL = {
     "File Name": True,
     "Protocol Type": True,
+    "File Size": True,
+    "Created Date": True,
+    "Created By": True,
+    "Last Modify Date": True,
     "Folder Name": True,
     "Folder Path": False,
     "Full Path": False,

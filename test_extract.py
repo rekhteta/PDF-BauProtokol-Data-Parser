@@ -15,18 +15,18 @@ def finish(success, msg, path):
 logging.basicConfig(level=logging.ERROR)
 
 def run_test():
-    base_dir = r"P:\Alex Berichten\PDF_Parser"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     profiles = load_profiles()
 
     test_configs = [
         {
-            "dir": "Samples_Einblas_Protokoll",
-            "profile_name": "Einblas-Protokoll",
+            "dir": "Samples/Samples_Einblas_Protokoll",
+            "profile_name": "Einblas",
             "fields": ["Strecke", "Faserzahl", "Farbe-Kennung", "Rohr or Rohrtyp"]
         },
         {
-            "dir": "Samples_Standortsicherung_Protokoll",
-            "profile_name": "Standortsicherung-Protokoll",
+            "dir": "Samples/Samples_Standortsicherung_Protokoll",
+            "profile_name": "Standortsicherung",
             "fields": ["Sch.-Nr.", "Gemeinde", "Lagebeschreibung", "Baumaße:"]
         }
     ]

@@ -32,7 +32,7 @@ class InlineExtractor(FieldExtractor):
     """Value is on the same line as the label."""
     def __init__(self, *label_variants: str):
         self.regexes = [
-            re.compile(rf"\b{re.escape(lbl)}\b\s*:\s*([^\n]+)", re.IGNORECASE)
+            re.compile(rf"\b{re.escape(lbl)}\b\s*(?::\s*|\s+)(\S[^\n]*)", re.IGNORECASE)
             for lbl in label_variants
         ]
 

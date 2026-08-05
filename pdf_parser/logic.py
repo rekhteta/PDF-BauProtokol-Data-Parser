@@ -167,9 +167,9 @@ class PDFParserLogic:
                         # 1. Date normalization for Einblasdatum
                         if "Einblasdatum" in extraction_result:
                             raw_date = extraction_result["Einblasdatum"]
-                            if raw_date and not re.search(r"\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4}", raw_date):
+                            if raw_date and not re.search(r"\d{1,2}[.\-/: ]\d{1,2}[.\-/: ]\d{2,4}", raw_date):
                                 date_match = re.search(
-                                    r"(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4})\s+(\d{1,2}:\d{2}(?::\d{2})?)",
+                                    r"(\d{1,2}[.\-/: ]\d{1,2}[.\-/: ]\d{2,4})\s+(\d{1,2}:\d{2}(?::\d{2})?)",
                                     page0_text
                                 )
                                 if date_match:
@@ -213,6 +213,46 @@ class PDFParserLogic:
                     extraction_result["Folder Path"] = folder_path_full
                     extraction_result["Folder Name"] = os.path.basename(folder_path_full)
                     
+                    # File Size
+                    try:
+                        size_bytes = os.path.getsize(file_path)
+                        extraction_result["File Size"] = f"{round(size_bytes / 1024, 1)} KB"
+                    except Exception:
+                        extraction_result["File Size"] = ""
+                        
+                    # Created and Modified Dates
+                    from datetime import datetime
+                    try:
+                        c_time = os.path.getctime(file_path)
+                        extraction_result["Created Date"] = datetime.fromtimestamp(c_time).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        extraction_result["Created Date"] = ""
+                        
+                    try:
+                        m_time = os.path.getmtime(file_path)
+                        extraction_result["Last Modify Date"] = datetime.fromtimestamp(m_time).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        extraction_result["Last Modify Date"] = ""
+                        
+                    # Created By (File Owner)
+                    owner_name = "Unknown"
+                    try:
+                        import win32security
+                        sd = win32security.GetFileSecurity(file_path, win32security.OWNER_SECURITY_INFORMATION)
+                        owner_sid = sd.GetSecurityDescriptorOwner()
+                        name, domain, type = win32security.LookupAccountSid(None, owner_sid)
+                        owner_name = f"{domain}\\{name}"
+                    except Exception:
+                        try:
+                            import subprocess
+                            cmd = f'powershell -Command "(Get-Acl \'{file_path}\').Owner"'
+                            res = subprocess.check_output(cmd, shell=True, text=True, timeout=2).strip()
+                            if res:
+                                owner_name = res
+                        except Exception:
+                            pass
+                    extraction_result["Created By"] = owner_name
+
                     return extraction_result
             except Exception as e:
                 logging.error(f"Error parsing PDF '{file_name}': {e}", exc_info=True)
@@ -359,7 +399,7 @@ class PDFParserLogic:
         
         # 3. Normalize TIME part
         if time_part:
-            time_part = re.sub(r"[\dots\-]", ":", time_part)
+            time_part = re.sub(r"[.\-]", ":", time_part)
             t_parts = time_part.split(":")
             if len(t_parts) >= 2:
                 h = t_parts[0].zfill(2)
