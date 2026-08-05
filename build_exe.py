@@ -36,6 +36,19 @@ def build_executable():
         "--noconsole",
         f"--name={dist_name}",
         "--clean",
+        "--exclude-module=scipy",
+        "--exclude-module=sklearn",
+        "--exclude-module=PyQt5",
+        "--exclude-module=bokeh",
+        "--exclude-module=plotly",
+        "--exclude-module=skimage",
+        "--exclude-module=jupyterlab",
+        "--exclude-module=notebook",
+        "--exclude-module=altair",
+        "--exclude-module=statsmodels",
+        "--exclude-module=astropy",
+        "--exclude-module=distributed",
+        "--exclude-module=xarray",
         entry_point
     ]
     
