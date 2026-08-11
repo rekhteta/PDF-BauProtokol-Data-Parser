@@ -342,15 +342,15 @@ class ProfileManagerWindow(tk.Toplevel):
         entry.pack(anchor="w", padx=5, pady=(2, 5))
         return entry
 
-    def _create_sector_title(self, parent, text: str):
-        title_var = tk.StringVar(value=text)
-        entry = tk.Entry(parent, textvariable=title_var, state="readonly",
-                         readonlybackground="#F3F4F6", relief="flat", bd=0,
-                         font=("Segoe UI", 9, "bold"), fg="#1F2937")
-        entry.pack(anchor="w", padx=5, pady=(2, 5))
-        return entry
-
-    # ───────────�        # ── Panel 1: Profiles Sidebar ──────────────────────────────────────
+    # --------------------------------------------------------------------------
+    # UI Construction
+    # --------------------------------------------------------------------------
+    def _build_ui(self):
+        # 3 Panels PanedWindow
+        paned = ttk.PanedWindow(self, orient="horizontal")
+        paned.pack(fill="both", expand=True, padx=15, pady=(15, 5))
+        
+        # -- Panel 1: Profiles Sidebar --------------------------------------
         left_frame = ttk.LabelFrame(paned, text="")
         paned.add(left_frame, weight=1)
         self._create_sector_title(left_frame, "Profiles")
@@ -367,10 +367,10 @@ class ProfileManagerWindow(tk.Toplevel):
         
         move_frame_profiles = ttk.Frame(left_frame)
         move_frame_profiles.pack(fill="x", padx=5, pady=(0, 5))
-        ttk.Button(move_frame_profiles, text="▲ Move Up", command=self._move_profile_up, style="Secondary.TButton").pack(side="left", fill="x", expand=True, padx=1)
-        ttk.Button(move_frame_profiles, text="▼ Move Down", command=self._move_profile_down, style="Secondary.TButton").pack(side="left", fill="x", expand=True, padx=1)
+        ttk.Button(move_frame_profiles, text="^ Move Up", command=self._move_profile_up, style="Secondary.TButton").pack(side="left", fill="x", expand=True, padx=1)
+        ttk.Button(move_frame_profiles, text="v Move Down", command=self._move_profile_down, style="Secondary.TButton").pack(side="left", fill="x", expand=True, padx=1)
         
-        # ── Panel 2: Columns list ──────────────────────────────────────────
+        # -- Panel 2: Columns list ------------------------------------------
         center_frame = ttk.LabelFrame(paned, text="")
         paned.add(center_frame, weight=1)
         self._create_sector_title(center_frame, "Columns Configuration")
@@ -382,8 +382,8 @@ class ProfileManagerWindow(tk.Toplevel):
         # Move Up / Move Down for columns
         move_frame_cols = ttk.Frame(center_frame)
         move_frame_cols.pack(fill="x", padx=5, pady=(0, 2))
-        ttk.Button(move_frame_cols, text="▲ Up", command=self._move_column_up, style="Secondary.TButton").pack(side="left", fill="x", expand=True, padx=1)
-        ttk.Button(move_frame_cols, text="▼ Down", command=self._move_column_down, style="Secondary.TButton").pack(side="left", fill="x", expand=True, padx=1)
+        ttk.Button(move_frame_cols, text="^ Up", command=self._move_column_up, style="Secondary.TButton").pack(side="left", fill="x", expand=True, padx=1)
+        ttk.Button(move_frame_cols, text="v Down", command=self._move_column_down, style="Secondary.TButton").pack(side="left", fill="x", expand=True, padx=1)
         
         # Add new column
         add_col_frame = ttk.Frame(center_frame)
@@ -395,24 +395,11 @@ class ProfileManagerWindow(tk.Toplevel):
         btn_frame_columns = ttk.Frame(center_frame)
         btn_frame_columns.pack(fill="x", padx=5, pady=(0, 5))
         ttk.Button(btn_frame_columns, text="Remove Column", command=self._remove_column, style="Secondary.TButton").pack(fill="x")
- 
-        # ── Panel 3: PDF Calibration ───────────────────────────────────────
-        right_frame = ttk.LabelFrame(paned, text="")
-        paned.add(right_frame, weight=5)
-        self._create_sector_title(right_frame, "Layout Calibration & Rules")r_frame)
-        add_col_frame.pack(fill="x", padx=5, pady=(0, 2))
-        self.entry_new_col = ttk.Entry(add_col_frame, font=("Segoe UI", 9))
-        self.entry_new_col.pack(side="left", fill="x", expand=True, ipady=2)
-        ttk.Button(add_col_frame, text="+ Add", command=self._add_column, style="Secondary.TButton").pack(side="right", padx=(5, 0))
-        
-        btn_frame_columns = ttk.Frame(center_frame)
-        btn_frame_columns.pack(fill="x", padx=5, pady=(0, 5))
-        ttk.Button(btn_frame_columns, text="Remove Column", command=self._remove_column, style="Secondary.TButton").pack(fill="x")
 
-        # ── Panel 3: PDF Calibration ───────────────────────────────────────
+        # -- Panel 3: PDF Calibration ---------------------------------------
         right_frame = ttk.LabelFrame(paned, text="")
-        self._create_sector_title(right_frame, "Layout Calibration & Rules")
         paned.add(right_frame, weight=5)
+        self._create_sector_title(right_frame, "Layout Calibration & Rules")
 
         # Split Right Frame into two sub-columns: left for PDF Image, right for settings
         calib_paned = ttk.PanedWindow(right_frame, orient="horizontal")
